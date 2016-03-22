@@ -1,0 +1,64 @@
+library(xgboost)
+library(Matrix)
+set.seed(1234)
+
+setwd("src")
+
+train <- read.csv("..\\input\\train.csv")
+test  <- read.csv("..\\input\\test.csv")
+
+##### Removing IDs
+train$ID <- NULL
+test.id <- test$ID
+test$ID <- NULL
+
+##### Extracting TARGET
+train.y <- train$TARGET
+train$TARGET <- NULL
+
+##### 0 count per line
+count0 <- function(x) {
+  return( sum(x == 0) )
+}
+train$n0 <- apply(train, 1, FUN=count0)
+test$n0 <- apply(test, 1, FUN=count0)
+
+train <- train[, feature.names]
+test <- test[, feature.names]
+
+train[is.na(train)] <- -1
+test[is.na(test)]   <- -1
+
+train$TARGET <- train.y
+
+dmtrain <- data.matrix( train)
+
+dtrain <- xgb.DMatrix(data=dmtrain, label=train.y)
+watchlist <- list(train=dtrain)
+
+param <- list(  objective           = "binary:logistic", 
+                booster             = "gbtree",
+                eval_metric         = "logloss",
+                eta                 = 0.02,
+                max_depth           = 7,
+                subsample           = 0.8,
+                alpha = 0.1,
+                colsample_bytree    = 0.85
+)
+
+clf <- xgb.train(   params              = param, 
+                    data                = dtrain, 
+                    nrounds             = 1000, 
+                    verbose             = 1,
+                    watchlist           = watchlist,
+                    maximize            = FALSE
+)
+
+
+test$TARGET <- -1
+test <- data.matrix(test)
+
+preds <- predict(clf, test)
+submission <- data.frame(ID=test.id, PredictedProb=preds)
+cat("saving the submission file\n")
+write.csv(submission,file="final.csv", row.names = FALSE)
